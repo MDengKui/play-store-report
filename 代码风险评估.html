@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8.3 矩阵关联溯源：底层技术特征全景复盘</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-red: #f85149;
+            --accent-yellow: #d29922;
+            --border-color: #30363d;
+        }
+
+        body {
+            font-family: "SF Mono", "Segoe UI Mono", "Roboto Mono", monospace;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 30px;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        /* 头部 */
+        .fact-header {
+            background: rgba(248, 81, 73, 0.05);
+            border-left: 4px solid var(--accent-red);
+            padding: 25px 30px;
+            border-radius: 6px;
+            margin-bottom: 40px;
+        }
+
+        .fact-header h1 { margin: 0 0 15px 0; font-size: 24px; color: #fff; font-weight: 600; }
+        .fact-list { margin: 0; padding-left: 20px; color: #b1bac4; }
+        .fact-list li { margin-bottom: 8px; }
+
+        /* 维度卡片 */
+        .dim-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+
+        .dim-header {
+            padding: 15px 25px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(255,255,255,0.02);
+            text-transform: uppercase;
+        }
+
+        .dim-content { padding: 25px 30px; }
+
+        /* 策略与代码块 */
+        .strategy-block {
+            background: #0d1117;
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 25px;
+        }
+        
+        .code-block {
+            font-family: "JetBrains Mono", monospace, Consolas;
+            font-size: 13px;
+            color: var(--accent-blue);
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+        
+        .highlight { color: #ff7b72; font-weight: bold; }
+        .highlight-green { color: var(--accent-green); }
+
+        /* 分析网格 */
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .analysis-box {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: 6px;
+        }
+
+        .analysis-box h4 {
+            margin: 0 0 15px 0;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px dashed var(--border-color);
+            padding-bottom: 8px;
+        }
+        
+        .box-title-green { color: var(--accent-green); }
+        .box-title-red { color: var(--accent-red); }
+        .box-title-yellow { color: var(--accent-yellow); }
+
+        .text-desc { font-size: 13.5px; color: #d2d6db; text-align: justify; }
+        .text-desc ul { padding-left: 18px; margin: 0; }
+        .text-desc li { margin-bottom: 8px; }
+
+        /* 深度对比区 */
+        .comparison-section {
+            margin-top: 30px;
+            border-top: 1px solid var(--border-color);
+            padding-top: 25px;
+        }
+        .comparison-title { color: #fff; font-size: 16px; margin-bottom: 20px; font-weight: 700; text-align: center; }
+        
+        .vs-box {
+            background: #0d1117;
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: 6px;
+        }
+        
+        .vs-box h5 { margin: 0 0 10px 0; font-size: 14px; color: #fff; border-bottom: 1px solid #30363d; padding-bottom: 8px;}
+        .risk-tag { 
+            display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-bottom: 10px;
+        }
+        .risk-fatal { background: rgba(248, 81, 73, 0.2); color: #ff7b72; border: 1px solid var(--accent-red); }
+        .risk-warn { background: rgba(210, 153, 34, 0.2); color: #d29922; border: 1px solid var(--accent-yellow); }
+        .risk-low { background: rgba(63, 185, 80, 0.2); color: #3fb950; border: 1px solid var(--accent-green); }
+        .risk-normal { background: rgba(56, 139, 253, 0.15); color: #58a6ff; border: 1px solid #1f6feb; }
+
+        /* 百分比条部分 */
+        .percentage-section {
+            background: #0d1117;
+            border: 1px solid #484f58;
+            border-radius: 8px;
+            padding: 40px;
+            margin-top: 40px;
+            margin-bottom: 40px;
+        }
+
+        .percentage-title { text-align: center; color: #fff; font-size: 18px; margin-bottom: 30px; }
+        .bar-container { margin-bottom: 25px; }
+        .bar-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; color: #c9d1d9; }
+        .bar-bg { width: 100%; height: 12px; background: #21262d; border-radius: 6px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 6px; }
+        .fill-red { background: var(--accent-red); width: 70%; }
+        .fill-yellow { background: var(--accent-yellow); width: 25%; }
+        .fill-blue { background: var(--accent-blue); width: 5%; }
+
+        /* 关联溯源图 */
+        .graph-board {
+            background: #0d1117;
+            border: 1px solid #484f58;
+            border-radius: 8px;
+            padding: 40px;
+            margin-top: 40px;
+        }
+
+        .graph-title { text-align: center; color: #fff; font-size: 18px; margin-bottom: 40px; }
+        .flow-container { display: flex; align-items: stretch; justify-content: space-between; position: relative; }
+        .node-col { width: 28%; display: flex; flex-direction: column; gap: 20px; position: relative; z-index: 2; }
+        .g-node { background: #161b22; border: 1px solid var(--border-color); padding: 20px; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .g-node h4 { margin: 0 0 10px 0; color: #fff; font-size: 14px; }
+        .g-node p { margin: 0; color: var(--text-muted); font-size: 13px; }
+        .g-node.danger { border-color: var(--accent-red); box-shadow: 0 0 15px rgba(248, 81, 73, 0.15); }
+        .g-node.warning { border-color: var(--accent-yellow); }
+        .center-col { width: 35%; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; z-index: 2; }
+        .engine-node {
+            background: #21262d; border: 2px solid #8957e5; padding: 25px; border-radius: 50%;
+            text-align: center; width: 140px; height: 140px; display: flex; flex-direction: column; justify-content: center;
+            box-shadow: 0 0 30px rgba(137, 87, 229, 0.2);
+        }
+        .engine-node span { color: #d2a8ff; font-weight: bold; font-size: 13px; }
+        .line-wrapper { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+        .svg-line { stroke: var(--accent-red); stroke-width: 2; fill: none; stroke-dasharray: 4,4; }
+        .svg-line-solid { stroke: var(--accent-red); stroke-width: 2; fill: none; }
+
+        /* 总结块 */
+        .verdict-block {
+            background: rgba(255,255,255,0.03);
+            border-left: 4px solid var(--accent-red);
+            padding: 20px 30px;
+            font-size: 15px;
+            color: #d2d6db;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="fact-header">
+        <h1>代号 8.3 矩阵关联：底层技术特征全景复盘</h1>
+        <ul class="fact-list">
+            <li><strong>核心矛盾：</strong>我们做了严格的物理隔离（虚拟机/老号）和代码混淆，但最近 30 天矩阵全军覆没。</li>
+            <li><strong>关键线索：</strong>某账号在 60 天前已去除 OSS 配置，但谷歌依然追溯到其“V1 历史版本”存在违规，并触发 8.3 连坐。</li>
+            <li><strong>复盘视角：</strong>作为底层代码编写者，我将拆解：既然原生层只是 JSBridge 空壳，谷歌到底是通过哪几条暗线（间接污点流向、Syscall 时序、基建根节点）把我们一锅端的。</li>
+        </ul>
+    </div>
+
+    <!-- 维度一：代码指纹 -->
+    <div class="dim-card">
+        <div class="dim-header" style="color: var(--accent-blue);">
+            <i class="fas fa-file-code"></i> 维度一：代码指纹与间接污点 (Indirect Taint)
+        </div>
+        <div class="dim-content">
+            <div class="strategy-block">
+                <div class="code-block">
+- UI层：使用 Flutter 全新重写 (AOT二进制)。
+- 逻辑层：多处违规分离，AB面隔离。
+- 原生层：高熵字典混淆，重命名所有类，所有 JSON 拼接均无实体类。
+- 交互层：<strong style="color: var(--accent-yellow);">数据中转模式（Native加密存本地 -> JS主动调用解密读取）</strong>。
+注：A面代码/插件每次新写，SDK不固定。</div>
+            </div>
+
+            <div class="analysis-grid">
+                <div class="analysis-box">
+                    <h4 class="box-title-green"><i class="fas fa-shield-alt"></i> 谷歌静态检测为何失效？</h4>
+                    <div class="text-desc">
+                        <ul>
+                            <li><strong>Flutter AOT 屏障：</strong> Flutter 将代码编译为二进制 Blob，传统的 Java/Kotlin 代码扫描工具无法解析其内部逻辑。这让我们的 A 面代码在谷歌眼里就是一个“黑盒”。</li>
+                            <li><strong>混淆与加密：</strong> 高熵混淆破坏了类名索引，字符串加密隐藏了 "Contact" 等敏感词。这直接废掉了基于关键词和哈希的初级关联。</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="analysis-box">
+                    <h4 class="box-title-green"><i class="fas fa-check"></i> 我们阻断了什么</h4>
+                    <div class="text-desc">
+                        通过每次重写 Flutter 外壳和引入不同的插件，我们成功阻断了基于<span class="highlight-green">“代码文本相似度 (Text Similarity)”</span>和<span class="highlight-green">“依赖库指纹 (Lib Hash)”</span>的批量关联。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 核心：哪里发生了强关联 -->
+            <div class="analysis-box" style="margin-top: 20px; border-color: var(--accent-red);">
+                <h4 class="box-title-red"><i class="fas fa-exclamation-triangle"></i> 哪里发生了强关联：间接污点流向 (Indirect Taint Flow)</h4>
+                <div class="text-desc">
+                    <strong style="color: #fff;">1. 谷歌启用更高阶分析：</strong><br>
+                    由于静态混淆和逻辑切断，谷歌启用了追踪数据流向的“污点分析”。<br><br>
+                    <strong style="color: #fff;">2. 本地存储中转（Dead Drop）的特征：</strong><br>
+                    我采用了“原生存本地 -> JS 取本地”的中转策略。这比直接 JS 回调要安全，切断了内存引用。<br>
+                    但在谷歌分析引擎眼中，只要业务逻辑是“传递设备信息”，就必然存在<code style="color: var(--accent-red);">Source (AppList) -> Write File -> Read File -> Sink (JSBridge Return)</code> 的闭环。<br>
+                    只要数据进去和出来的类型一致，这条<span class="highlight">间接污点链路</span>依然是连通的。<br><br>
+                    <strong style="color: #fff;">3. IO 行为指纹：</strong><br>
+                    这种“刚写完加密文件，马上就被 JS 读取解密”的密集 IO 操作，在系统底层构成了极具特征的<strong>行为指纹</strong>。
+                </div>
+            </div>
+
+            <!-- 深度对比：情况A vs 情况B -->
+            <div class="comparison-section">
+                <div class="comparison-title">🔍 深度对比：为什么「重构代码」也无法消除关联？</div>
+                <div class="text-desc" style="text-align: center; margin-bottom: 20px;">
+                    我们的 H5 交互采用本地存储中转，这是业务刚需。<br>
+                    但这种写法在污点分析下，无论怎么重构，本质风险是一样的。
+                </div>
+                <div class="vs-grid">
+                    <!-- 情况 A -->
+                    <div class="vs-box">
+                        <h5>情况 A：当前策略 (本地加密中转 + 仅混淆)</h5>
+                        <span class="risk-tag risk-normal">静态骨架：无法关联</span>
+                        <span class="risk-tag risk-warn">污点流向：链路连通</span>
+                        <div class="text-desc" style="color: var(--text-muted);">
+                            <strong>技术逻辑：</strong><br>
+                            代码层面做了混淆，静态扫描确实看不出来。<br>
+                            但在<strong>逻辑层面</strong>，<code>File.write</code> 和 <code>File.read</code> 是为了完成同一个数据传输任务而存在的。<br>
+                            <strong>结论：</strong>虽然切断了内存回调，但在污点分析眼中，这条“数据传输管道”依然是笔直的。
+                        </div>
+                    </div>
+
+                    <!-- 情况 B -->
+                    <div class="vs-box">
+                        <h5>情况 B：假设策略 (完全重构 + 逻辑重写)</h5>
+                        <span class="risk-tag risk-normal">静态骨架：无法关联</span>
+                        <span class="risk-tag risk-warn">污点流向：链路连通</span>
+                        <div class="text-desc" style="color: var(--text-muted);">
+                            <strong>为什么结果一样？</strong><br>
+                            即便我们把项目结构、类名、依赖库全换了（重构）。<br>
+                            <strong>只要业务逻辑不变</strong>（依然需要原生拿设备信息给 H5），你就必须写“存文件”和“读文件”的代码。<br>
+                            <strong>结论：</strong><br>
+                            重构改变了代码的皮囊，但只要“数据中转”这个交互机制不换，<strong>污点流向指纹 (Taint Flow Fingerprint)</strong> 就是 100% 一致的。这不是代码写得好坏的问题，是业务逻辑本身自带特征。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 维度二：行为指纹 -->
+    <div class="dim-card">
+        <div class="dim-header" style="color: var(--accent-yellow);">
+            <i class="fas fa-running"></i> 维度二：行为指纹与 Syscall 时序 (上帝视角)
+        </div>
+        <div class="dim-content">
+            <div class="strategy-block">
+                <div class="code-block">
+不管表层 UI 怎么变，App 一旦启动，底层的交互链路是完全一致的：
+1. A面 (Flutter)：嗅探目标国家 IP，申请相关权限。
+2. B面 (原生)：在后台静默提取设备与应用列表信息。
+3. 跨层传递：原生层不发网络请求，而是将数据传导给 H5 (WebView)。
+4. 网络上报：最终由 H5 负责将数据发送给后端服务器。</div>
+            </div>
+
+            <div class="analysis-grid">
+                <div class="analysis-box">
+                    <h4 class="box-title-green"><i class="fas fa-search"></i> 谷歌如何找关联</h4>
+                    <div class="text-desc">
+                        Play Protect 动态沙箱模拟目标 IP 启动应用后，在操作系统底层（Framework 层）记录 App 生命周期内的全部<strong>系统调用（Syscall）时序</strong>。
+                    </div>
+                </div>
+                <div class="analysis-box">
+                    <h4 class="box-title-green"><i class="fas fa-check"></i> 我们阻断了什么关联</h4>
+                    <div class="text-desc">
+                        我们在前端做 IP 拦截，且原生层完全不直接发起网络请求，这阻断了沙箱通过直接监听原生层网络包（抓包）来寻找相似域名的关联途径。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 核心：指纹碰撞点 -->
+            <div class="analysis-box" style="margin-top: 20px; border-color: var(--accent-yellow);">
+                <h4 class="box-title-yellow"><i class="fas fa-exclamation-triangle"></i> 哪里发生了指纹碰撞：行为时序 (Rhythm) 100% 相同</h4>
+                <div class="text-desc">
+                    <strong style="color: #fff;">1. 沙箱的上帝视角：</strong><br>
+                    它看到的不是业务代码，而是动作流：“进程 A 测了 IP -> 调了系统权限 -> 起了个 WebView -> <span class="highlight">频繁读写本地文件 (IO峰值)</span> -> H5 发起上报”。<br><br>
+                    <strong style="color: #fff;">2. 节奏判定：</strong><br>
+                    当独立 VPS 上的包 A、包 B、包 C，在沙箱里跑出的这段底层行为轨迹（节奏和链路）一模一样时，引擎直接判定它们是由同一套中央业务逻辑驱动的。<br><br>
+                    <strong style="color: #fff;">3. 高危动作集合 (恶意判定)：</strong><br>
+                    <ul>
+                        <li><span class="highlight">人脸识别指纹：</span>调用 Camera 接口进行人脸/活体检测，这在工具类应用中是非常独特的高危特征，极易形成聚类。</li>
+                        <li><span class="highlight">通讯录/AppList读取：</span>在后台静默读取隐私数据，是沙箱重点监控对象。</li>
+                        <li><span class="highlight">AB面欺诈暴露 (Cloaking)：</span>沙箱伪装 IP 后，发现原本声称“无登录”的 App 突然展示了 B 面登录框。所有包都存在这种“对谷歌隐藏，对用户开放”的逻辑。</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 维度三：基建历史关联 -->
+    <div class="dim-card">
+        <div class="dim-header" style="color: var(--accent-red);">
+            <i class="fas fa-network-wired"></i> 维度三：基建历史串联 (击穿物理隔离的死穴)
+        </div>
+        <div class="dim-content">
+            <div class="strategy-block">
+                <div class="code-block">
+关于 OSS 动态备用域名的逻辑：
+- 我们在每个包的内存中，放置了备用 OSS 链接用于防失联。
+- 防护 1：主域名不死，这段代码永远不会被触发执行。
+- 防护 2：每个包的 OSS 链接，我们都换了 URL 关键字（如 ?key=A / ?key=B），且返回内容不同。
+- 防护 3：某个老账号在 60 天前的更新中，已经彻底删除了这段配置。</div>
+            </div>
+
+            <div class="analysis-grid">
+                <div class="analysis-box">
+                    <h4 class="box-title-green"><i class="fas fa-search"></i> 谷歌如何找关联</h4>
+                    <div class="text-desc">
+                        利用 <strong>知识图谱（Knowledge Graph）</strong> 引擎，提取当前违规包内存中的基建特征，然后无视时间跨度，向庞大的全量历史快照数据库发起节点回扫。
+                    </div>
+                </div>
+                <div class="analysis-box">
+                    <h4 class="box-title-green"><i class="fas fa-check"></i> 我们阻断了什么关联</h4>
+                    <div class="text-desc">
+                        现役的主域名完全独立，VPS 独立，注册账号用的网络环境独立。这成功阻断了通过现网 IP 碰撞、现役域名解析记录（DNS）追踪的表层关联。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 核心：基建碰撞点 -->
+            <div class="analysis-box" style="margin-top: 20px; border-color: var(--accent-red);">
+                <h4 class="box-title-red"><i class="fas fa-radiation"></i> 哪里发生了指纹碰撞：基建根节点 (Root Node)</h4>
+                <div class="text-desc">
+                    <strong style="color: #fff;">1. 静态提取无视是否触发：</strong><br>
+                    即使链接是休眠的，引擎通过解密和内存 Dump，依然提取到了这段 OSS 链接。<br><br>
+                    <strong style="color: #fff;">2. URL关键字差异无效：</strong><br>
+                    <code>bucket.oss.com?key=A</code> 和 <code>?key=B</code>，在图谱引擎看来，其<span class="highlight">基建根节点 (Root Node)</span> 都是 <code>bucket.oss.com</code>。<br><br>
+                    <strong style="color: #fff;">3. 穿透隔离 (核心死因)：</strong><br>
+                    由于谷歌永久保留历史 APK。图谱发现，现在出事的包，和那些早已删除配置的老账号（60天前的快照中）共享了这个 OSS 根节点。<br>
+                    这唯一的暗线，瞬间将所有物理隔离的账号死死串联，导致集群连坐。
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 关联溯源权重分析 -->
+    <div class="percentage-section">
+        <h3 class="percentage-title">矩阵全军覆没：关联溯源权重分析</h3>
+        
+        <div class="bar-container">
+            <div class="bar-header">
+                <span><strong style="color: var(--accent-red);">70% - 历史 OSS 基建根节点 (硬关联)</strong></span>
+                <span>击穿物理隔离的直接原因</span>
+            </div>
+            <div class="text-desc" style="margin-bottom: 8px;">
+                最强的物理证据。无论代码如何变、URL参数如何改，只要历史快照里大家都用过同一个 OSS 存储桶，这就是风控系统判定“同一开发者”的铁证。
+            </div>
+            <div class="bar-bg"><div class="bar-fill fill-red"></div></div>
+        </div>
+
+        <div class="bar-container" style="margin-top: 25px;">
+            <div class="bar-header">
+                <span><strong style="color: var(--accent-yellow);">25% - 行为指纹与高危动作 (软关联)</strong></span>
+                <span>判定业务同源性的核心</span>
+            </div>
+            <div class="text-desc" style="margin-bottom: 8px;">
+                “上传通讯录/AppList + 人脸识别 + 隐瞒登录(欺诈)” 这一整套高危组合拳，在沙箱眼中具有极高的独特性。所有包都执行这套逻辑，直接暴露了属于同一业务中台。
+            </div>
+            <div class="bar-bg"><div class="bar-fill fill-yellow"></div></div>
+        </div>
+
+        <div class="bar-container" style="margin-top: 25px;">
+            <div class="bar-header">
+                <span><strong style="color: var(--accent-blue);">5% - B 面数据流向逻辑 (辅助关联)</strong></span>
+                <span>代码层面的唯一残留</span>
+            </div>
+            <div class="text-desc" style="margin-bottom: 8px;">
+                即便只是手写拼接字符串，但“敏感数据 -> 拼接 -> 注入H5”的逻辑路径（污点流向）在所有包中是一致的。
+            </div>
+            <div class="bar-bg"><div class="bar-fill fill-blue"></div></div>
+        </div>
+    </div>
+
+    <!-- 图谱连线分析 -->
+    <div class="graph-board">
+        <h3 class="graph-title">风控逻辑执行链路（基于那条 60 天线索的推演）</h3>
+        
+        <div class="flow-container">
+            <!-- SVG 连线 -->
+            <svg class="line-wrapper">
+                <path d="M 310 100 L 485 180" class="svg-line-solid"></path>
+                <path d="M 625 180 L 790 100" class="svg-line"></path>
+                <path d="M 625 210 L 790 280" class="svg-line-solid"></path>
+            </svg>
+
+            <!-- 触发区 -->
+            <div class="node-col">
+                <div class="g-node danger">
+                    <h4>📱 近期上架的包</h4>
+                    <p>因高危动作（通讯录/人脸/欺诈登录）暴露，被判定为【恶意软件】</p>
+                </div>
+                <div class="g-node warning" style="margin-top: 10px;">
+                    <h4>🔗 提取现役特征</h4>
+                    <p>引擎提取该包 OSS 节点、网络基建特征 (IP段/ASN)</p>
+                </div>
+            </div>
+
+            <!-- 风控引擎 -->
+            <div class="center-col">
+                <div class="engine-node">
+                    <span>Google Play<br>Knowledge Graph</span>
+                    <span style="font-size: 12px; margin-top: 5px; color: #8b949e;">执行历史回扫<br>(Retro-Hunting)</span>
+                </div>
+            </div>
+
+            <!-- 被连坐区 -->
+            <div class="node-col">
+                <div class="g-node warning">
+                    <h4>🗄️ 60 天前的历史老包 (V1版)</h4>
+                    <p>存放在谷歌历史库。硬编码了同源的 OSS/动态域名，被引擎匹配命中。</p>
+                </div>
+                <div class="g-node danger" style="margin-top: 50px;">
+                    <h4>👤 隔离的老账号</h4>
+                    <p>即便当前版本已去除域名且虚拟机隔离，仍因历史同源图谱，触发【8.3 连坐】</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
